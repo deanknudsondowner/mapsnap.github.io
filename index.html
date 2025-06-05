@@ -1,0 +1,231 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Map Snap</title>
+
+  <link type="text/css" rel="stylesheet" href="normalize.css"/>
+  <link type="text/css" rel="stylesheet" href="skeleton.css"/>
+
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    html, body, #map {
+      height: 100%;
+    }
+
+    main {
+      position: relative;
+      height: 100%;
+    }
+
+    #map {
+      width: 1920px;
+      height: 1080px;
+    }
+
+    label {
+      color: #DCA06D;
+    }
+
+    input, select {
+      margin-bottom: 0;
+    }
+
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    /* Firefox */
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+
+    .parameters {
+      --spacing: 2rem;
+
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      padding: var(--spacing);
+      background: #210F37;
+      gap: var(--spacing);
+    }
+
+    .parameters > * {
+      width: 100%;
+    }
+
+    .align-bottom {
+      margin-bottom: 0;
+      align-self: end;
+    }
+
+  </style>
+</head>
+<body>
+  <main>
+    <div id="map"></div>
+    <div class="parameters">
+      <div>
+        <label for="latitude">Latitude</label>
+        <input class="u-full-width" id="latitude" type="number" min="-90.00000000" max="90.00000000" placeholder="Latitude">
+      </div>
+
+      <div>
+        <label for="longitude">Longitude</label>
+        <input class="u-full-width" id="longitude" type="number" min="-180.00000000" max="180.00000000" placeholder="Longitude">
+      </div>
+
+      <div>
+        <label for="zoom">Zoom</label>
+        <input class="u-full-width" id="zoom" type="number" min="0" max="23.00000000" placeholder="Zoom">
+      </div>
+
+      <div>
+        <label for="style">Map Style</label>
+        <select class="u-full-width" id="style">
+          <option value="standard" selected>Standard</option>
+          <option value="streets-v12">Streets</option>
+          <option value="outdoors-v12">Outdoors</option>
+          <option value="light-v11">Light</option>
+          <option value="dark-v11">Dark</option>
+          <option value="satellite-v9">Satellite</option>
+          <option value="satellite-streets-v12">Satellite Streets</option>
+          <option value="navigation-day-v1">Navigation Day</option>
+          <option value="navigation-night-v1">Navigation Night</option>
+        </select>
+      </div>
+
+      <button class="button-primary u-full-width align-bottom" id="snapBtn"> Generate Snap</button>
+    </div>
+  </main>
+
+  <canvas id="targetCanvas" hidden></canvas>
+
+  <script>
+    const DEFAULT_LATITUDE = -45.830186;
+    const DEFAULT_LONGITUDE = 170.553926
+    const DEFAULT_ZOOM = 10;
+
+    let token;
+
+    if (!token) {
+      const token = prompt("Please enter your mapbox access token");
+    }
+
+
+    mapboxgl.accessToken = token;
+    const map = new mapboxgl.Map({
+      container: 'map',
+      center: [DEFAULT_LONGITUDE, DEFAULT_LATITUDE],
+      zoom: DEFAULT_ZOOM,
+      attributionControl: false,
+      style: 'mapbox://styles/mapbox/standard',
+      preserveDrawingBuffer: true,
+      antialias: true
+    });
+
+    map.on('error', (response) => {
+      alert(response.error.message)
+    });
+
+    const latitudeInput = document.getElementById('latitude');
+    const longitudeInput = document.getElementById('longitude');
+    const zoomInput = document.getElementById('zoom');
+    const styleSelector = document.querySelector('select[id=style]');
+    const snapButton = document.getElementById('snapBtn');
+    const targetCanvas = document.getElementById('targetCanvas');
+    const targetContext = targetCanvas.getContext('2d');
+    targetCanvas.width = 1920;
+    targetCanvas.height = 1080;
+
+
+    latitudeInput.value = DEFAULT_LATITUDE;
+    longitudeInput.value = DEFAULT_LONGITUDE;
+    zoomInput.value = DEFAULT_ZOOM;
+
+    latitudeInput.addEventListener('input', () => {
+      map.setCenter([Number(longitudeInput.value), Number(latitudeInput.value)]);
+    });
+
+    longitudeInput.addEventListener('input', () => {
+      map.setCenter([Number(longitudeInput.value), Number(latitudeInput.value)]);
+    });
+
+    zoomInput.addEventListener('input', () => {
+      map.setZoom(zoomInput.value);
+    });
+
+    styleSelector.addEventListener('change', () => {
+      map.setStyle(`mapbox://styles/mapbox/${styleSelector[styleSelector.selectedIndex].value}`);
+    });
+
+    function updateLatLngInputs() {
+      const coordinate = map.getCenter();
+      latitudeInput.value = coordinate.lat;
+      longitudeInput.value = coordinate.lng;
+    }
+
+    map.on('zoom', () => {
+      zoomInput.value = map.getZoom();
+      updateLatLngInputs();
+    });
+
+    map.on('drag', updateLatLngInputs);
+
+
+    function download(filename, href) {
+      const temporaryDownloadTarget = document.createElement('a');
+      temporaryDownloadTarget.setAttribute('download', filename);
+      temporaryDownloadTarget.setAttribute('href', href);
+      temporaryDownloadTarget.click();
+    }
+
+    snapButton.addEventListener('click', () => {
+      const canvas = document.querySelector('.mapboxgl-canvas');
+      const im = canvas?.toDataURL('image/png');
+
+      if (im) {
+        const image = new Image();
+        image.src = im;
+        image.onload = () => {
+
+          targetContext.drawImage(image, 0, 0, targetCanvas.width, targetCanvas.height);
+          download('output.png', targetCanvas.toDataURL('image/png'));
+
+          const file = new Blob([
+            JSON.stringify({
+              style: styleSelector[styleSelector.selectedIndex].text,
+              latitude: latitudeInput.value,
+              longitude: longitudeInput.value,
+              zoom: zoomInput.value,
+            })
+          ], {
+            type: 'text/plain'
+          });
+
+          setTimeout(() => {
+            const url = URL.createObjectURL(file);
+            download('output.json', URL.createObjectURL(file))
+            URL.revokeObjectURL(url);
+          }, 300);
+        }
+      }
+    });
+
+  </script>
+</body>
+</html>
